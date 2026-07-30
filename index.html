@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F5F4EF">
+<title>热量日志</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍚</text></svg>">
+</head>
+<body>
+
+<div id="app"></div>
+<style>
+  :root{
+    --bg:#F5F4EF; --card:#FFFFFF; --ink:#22262A; --muted:#828992;
+    --line:#E7E5DE; --green:#2E7D5B; --green-soft:#E4F0EA;
+    --indigo:#4C5FD5; --indigo-soft:#E9EBFA;
+    --red:#C2483E; --amber:#B7791F;
+    --radius:16px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  #app{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); min-height:100vh;
+    max-width:520px; margin:0 auto; padding:16px 14px 92px;
+    font-size:15px; line-height:1.5;
+  }
+  .num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum";}
+  h1{font-size:17px; font-weight:700; letter-spacing:.02em;}
+  .sub{color:var(--muted); font-size:12.5px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:12px;}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  button{font:inherit; border:none; cursor:pointer; border-radius:12px;}
+  input,select{
+    font:inherit; width:100%; padding:11px 12px; border:1px solid var(--line);
+    border-radius:12px; background:#FBFAF7; color:var(--ink); font-size:16px;
+  }
+  input:focus{outline:2px solid var(--green); outline-offset:-1px; background:#fff;}
+  .btn-primary{background:var(--green); color:#fff; padding:12px 16px; font-weight:600; width:100%; font-size:15.5px;}
+  .btn-primary:active{opacity:.85;}
+  .btn-ghost{background:transparent; color:var(--muted); padding:6px 10px; font-size:13px;}
+  /* fuel gauge — signature */
+  .gauge{position:relative; height:18px; border-radius:9px; background:#ECEAE3; overflow:hidden; margin:14px 0 6px;}
+  .gauge-fill{position:absolute; inset:0 auto 0 0; background:var(--green); border-radius:9px; transition:width .5s cubic-bezier(.22,1,.36,1);}
+  .gauge-fill.over{background:var(--red);}
+  .gauge-tick{position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--ink); opacity:.55;}
+  .gauge-labels{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted);}
+  .hero-num{font-size:40px; font-weight:700; letter-spacing:-.02em;}
+  .deficit-chip{display:inline-block; padding:3px 10px; border-radius:999px; font-size:12.5px; font-weight:600;}
+  .chip-good{background:var(--green-soft); color:var(--green);}
+  .chip-bad{background:#F8E5E3; color:var(--red);}
+  .macro-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px;}
+  .macro{background:#FAF9F5; border:1px solid var(--line); border-radius:12px; padding:8px 10px; text-align:center;}
+  .macro b{font-size:16px; display:block;}
+  .macro span{font-size:11px; color:var(--muted);}
+  .entry{display:flex; justify-content:space-between; align-items:center; padding:11px 2px; border-bottom:1px solid var(--line);}
+  .entry:last-child{border-bottom:none;}
+  .entry .del{color:var(--muted); background:none; font-size:18px; padding:4px 8px; line-height:1;}
+  .quick-wrap{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-top:10px; scrollbar-width:none;}
+  .quick-wrap::-webkit-scrollbar{display:none;}
+  .quick{flex:0 0 auto; background:#FAF9F5; border:1px solid var(--line); border-radius:999px; padding:7px 13px; font-size:13px; white-space:nowrap;}
+  .quick:active{background:var(--green-soft);}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .grid4{display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:8px;}
+  label.f{font-size:12px; color:var(--muted); display:block; margin:10px 0 4px;}
+  /* tabs */
+  .tabbar{
+    position:fixed; left:0; right:0; bottom:0; background:rgba(255,255,255,.96);
+    backdrop-filter:blur(8px); border-top:1px solid var(--line);
+    display:flex; max-width:520px; margin:0 auto; padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tab{flex:1; background:none; padding:9px 0 7px; text-align:center; color:var(--muted); font-size:11.5px; border-radius:12px;}
+  .tab .ico{display:block; font-size:20px; margin-bottom:1px;}
+  .tab.on{color:var(--green); font-weight:700;}
+  .tab.on.w{color:var(--indigo);}
+  /* weight chart */
+  .wchart{width:100%; height:190px; display:block;}
+  .stat3{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .stat3 .macro b{color:var(--indigo);}
+  .datepick{display:flex; align-items:center; gap:6px;}
+  .datepick button{background:#FAF9F5; border:1px solid var(--line); width:34px; height:34px; border-radius:10px; font-size:16px;}
+  .empty{text-align:center; color:var(--muted); padding:22px 0; font-size:13.5px;}
+  .toast{
+    position:fixed; bottom:96px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:#fff; padding:9px 18px; border-radius:999px;
+    font-size:13.5px; opacity:0; transition:opacity .25s; pointer-events:none; z-index:9;
+  }
+  .toast.show{opacity:.95;}
+  .weekbars{display:flex; gap:6px; align-items:flex-end; height:86px; margin-top:12px;}
+  .wb{flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;}
+  .wb .bar{width:100%; border-radius:6px 6px 3px 3px; background:var(--green-soft); position:relative; overflow:hidden;}
+  .wb .bar i{position:absolute; bottom:0; left:0; right:0; background:var(--green); border-radius:6px 6px 0 0;}
+  .wb .bar i.over{background:var(--red);}
+  .wb span{font-size:10px; color:var(--muted);}
+</style>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const $=s=>document.querySelector(s);
+  const app=$('#app');
+  const DEFAULTS={targetKcal:2380, tdee:2878, goalWeight:80, startWeight:105};
+  let settings={...DEFAULTS};
+  let weights=[];            // [{d:'YYYY-MM-DD', kg}]
+  let foodlib=[];            // [{name,kcal,p,c,f,count,last}]
+  let dayCache={};           // date -> {entries:[...]}
+  let tab='today';
+  let viewDate=todayStr();
+
+  function todayStr(d){const t=d||new Date(); const p=n=>String(n).padStart(2,'0'); return t.getFullYear()+'-'+p(t.getMonth()+1)+'-'+p(t.getDate());}
+  function shiftDate(ds,n){const d=new Date(ds+'T12:00:00'); d.setDate(d.getDate()+n); return todayStr(d);}
+  function fmtDate(ds){const t=todayStr(); if(ds===t)return '今天'; if(ds===shiftDate(t,-1))return '昨天'; return ds.slice(5).replace('-','月')+'日';}
+  function toast(msg){const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1600);}
+
+  // ---------- storage ----------
+  const NS='calapp:';
+  async function sget(k){try{const r=localStorage.getItem(NS+k); return r?JSON.parse(r):null;}catch(e){return null;}}
+  async function sset(k,v){try{localStorage.setItem(NS+k,JSON.stringify(v));}catch(e){toast('保存失败,存储空间可能已满');}}
+  async function loadDay(ds){
+    if(dayCache[ds])return dayCache[ds];
+    const d=await sget('day:'+ds)||{entries:[]};
+    dayCache[ds]=d; return d;
+  }
+  async function saveDay(ds){await sset('day:'+ds,dayCache[ds]);}
+
+  async function init(){
+    const [s,w,f]=await Promise.all([sget('settings'),sget('weights'),sget('foodlib')]);
+    if(s)settings={...DEFAULTS,...s};
+    if(w)weights=w;
+    if(f)foodlib=f;
+    await loadDay(viewDate);
+    render();
+  }
+
+  // ---------- calc ----------
+  function dayTotals(d){
+    return d.entries.reduce((a,e)=>({kcal:a.kcal+(+e.kcal||0),p:a.p+(+e.p||0),c:a.c+(+e.c||0),f:a.f+(+e.f||0)}),{kcal:0,p:0,c:0,f:0});
+  }
+
+  // ---------- render ----------
+  function render(){
+    if(tab==='today')renderToday();
+    else if(tab==='weight')renderWeight();
+    else renderSettings();
+    renderTabs();
+  }
+  function renderTabs(){
+    const bar=document.createElement('div');
+    bar.className='tabbar';
+    bar.innerHTML=`
+      <button class="tab ${tab==='today'?'on':''}" data-t="today"><span class="ico">🍚</span>饮食</button>
+      <button class="tab w ${tab==='weight'?'on':''}" data-t="weight"><span class="ico">⚖️</span>体重</button>
+      <button class="tab ${tab==='settings'?'on':''}" data-t="settings"><span class="ico">⚙️</span>设置</button>`;
+    bar.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{tab=b.dataset.t; render(); window.scrollTo(0,0);});
+    const old=document.querySelector('.tabbar'); if(old)old.remove();
+    document.body.appendChild(bar);
+  }
+
+  // ===== TODAY =====
+  async function renderToday(){
+    const d=await loadDay(viewDate);
+    const t=dayTotals(d);
+    const target=settings.targetKcal, tdee=settings.tdee;
+    const remain=target-t.kcal;
+    const deficit=tdee-t.kcal;
+    const pct=Math.min(100,t.kcal/target*100);
+    const over=t.kcal>target;
+    const isToday=viewDate===todayStr();
+
+    // last 7 days bars
+    const days=[]; for(let i=6;i>=0;i--)days.push(shiftDate(todayStr(),-i));
+    const dayData=await Promise.all(days.map(loadDay));
+
+    app.innerHTML=`
+      <div class="row" style="margin-bottom:12px;">
+        <h1>热量日志</h1>
+        <div class="datepick">
+          <button id="dprev">‹</button>
+          <b style="min-width:52px;text-align:center;font-size:14px;">${fmtDate(viewDate)}</b>
+          <button id="dnext" ${isToday?'disabled style="opacity:.3"':''}>›</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div>
+            <div class="sub">已摄入 / 目标 ${target}</div>
+            <div class="hero-num num">${Math.round(t.kcal)}<span style="font-size:15px;color:var(--muted);font-weight:500;"> kcal</span></div>
+          </div>
+          <div style="text-align:right;">
+            <span class="deficit-chip ${deficit>=400?'chip-good':(over?'chip-bad':'chip-good')}">
+              ${over?'超出目标 '+Math.round(t.kcal-target):'缺口 ≈ '+Math.round(deficit)} kcal
+            </span>
+            <div class="sub" style="margin-top:6px;">${over?'':'还可吃 '+Math.round(remain)+' kcal'}</div>
+          </div>
+        </div>
+        <div class="gauge">
+          <div class="gauge-fill ${over?'over':''}" style="width:${pct}%"></div>
+          <div class="gauge-tick" style="left:${target/tdee*100}%" title="目标"></div>
+        </div>
+        <div class="gauge-labels"><span>0</span><span>目标 ${target}</span><span>TDEE ${tdee}</span></div>
+        <div class="macro-grid">
+          <div class="macro"><b class="num">${Math.round(t.p)}g</b><span>蛋白质</span></div>
+          <div class="macro"><b class="num">${Math.round(t.c)}g</b><span>碳水</span></div>
+          <div class="macro"><b class="num">${Math.round(t.f)}g</b><span>脂肪</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <b style="font-size:14px;">记一笔</b>
+        ${foodlib.length?`<div class="quick-wrap">${foodlib.slice(0,12).map((f,i)=>
+          `<button class="quick num" data-q="${i}">${f.name} · ${f.kcal}</button>`).join('')}</div>`:''}
+        <div class="grid4" style="margin-top:10px;">
+          <input id="fname" placeholder="食物名称">
+          <input id="fkcal" type="number" inputmode="numeric" placeholder="kcal">
+          <input id="fp" type="number" inputmode="numeric" placeholder="蛋白g">
+          <input id="ff" type="number" inputmode="numeric" placeholder="脂肪g">
+        </div>
+        <div class="grid2" style="margin-top:8px;">
+          <input id="fc" type="number" inputmode="numeric" placeholder="碳水g (可不填)">
+          <button class="btn-primary" id="fadd" style="width:100%;">添加</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row"><b style="font-size:14px;">${fmtDate(viewDate)}的记录</b><span class="sub num">${d.entries.length} 项</span></div>
+        ${d.entries.length? d.entries.map(e=>`
+          <div class="entry">
+            <div><b style="font-size:14px;">${esc(e.name)}</b>
+              <div class="sub num">${e.time||''}${e.p?' · 蛋白 '+e.p+'g':''}</div></div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <b class="num" style="color:var(--green);">${e.kcal}</b>
+              <button class="del" data-del="${e.id}">×</button>
+            </div>
+          </div>`).join('') : `<div class="empty">还没有记录,吃了什么记一笔 ↑</div>`}
+      </div>
+
+      <div class="card">
+        <b style="font-size:14px;">最近 7 天</b>
+        <div class="weekbars">
+          ${days.map((ds,i)=>{const k=dayTotals(dayData[i]).kcal; const h=Math.min(100,k/tdee*100);
+            return `<div class="wb"><div class="bar" style="height:70px;"><i class="${k>target?'over':''}" style="height:${h}%"></i></div><span>${ds.slice(8)}</span></div>`;}).join('')}
+        </div>
+        <div class="sub" style="margin-top:6px;">绿色 = 目标内 · 红色 = 超出 ${target} kcal</div>
+      </div>`;
+
+    $('#dprev').onclick=()=>{viewDate=shiftDate(viewDate,-1); renderToday();};
+    $('#dnext').onclick=()=>{if(!isToday){viewDate=shiftDate(viewDate,1); renderToday();}};
+    $('#fadd').onclick=addFood;
+    $('#fkcal').addEventListener('keydown',e=>{if(e.key==='Enter')addFood();});
+    app.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{
+      const f=foodlib[+b.dataset.q];
+      addEntry({name:f.name,kcal:f.kcal,p:f.p,c:f.c,f:f.f});
+    });
+    app.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+      const dd=dayCache[viewDate];
+      dd.entries=dd.entries.filter(e=>e.id!==b.dataset.del);
+      await saveDay(viewDate); renderToday();
+    });
+
+    async function addFood(){
+      const name=$('#fname').value.trim();
+      const kcal=+$('#fkcal').value;
+      if(!name||!kcal){toast('请填写名称和热量'); return;}
+      await addEntry({name,kcal,p:+$('#fp').value||0,c:+$('#fc').value||0,f:+$('#ff').value||0});
+    }
+    async function addEntry(e){
+      const dd=dayCache[viewDate];
+      const now=new Date();
+      dd.entries.push({...e,id:String(Date.now()),time:String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')});
+      // update food library
+      const ex=foodlib.find(f=>f.name===e.name);
+      if(ex){ex.count++; ex.last=Date.now(); ex.kcal=e.kcal;}
+      else foodlib.push({...e,count:1,last:Date.now()});
+      foodlib.sort((a,b)=>(b.count*2+b.last/1e13)-(a.count*2+a.last/1e13));
+      foodlib=foodlib.slice(0,30);
+      await Promise.all([saveDay(viewDate), sset('foodlib',foodlib)]);
+      toast('已记录 '+e.name);
+      renderToday();
+    }
+  }
+
+  // ===== WEIGHT =====
+  function renderWeight(){
+    const sorted=[...weights].sort((a,b)=>a.d<b.d?-1:1);
+    const latest=sorted[sorted.length-1];
+    const cur=latest?latest.kg:settings.startWeight;
+    const lost=settings.startWeight-cur;
+    const togo=cur-settings.goalWeight;
+    // weekly rate: compare to entry ~14 days back
+    let rate='—';
+    if(sorted.length>=2){
+      const past=sorted.find(w=>w.d>=shiftDate(latest.d,-14))||sorted[0];
+      const daysSpan=Math.max(1,(new Date(latest.d)-new Date(past.d))/864e5);
+      if(daysSpan>=3) rate=((past.kg-latest.kg)/daysSpan*7).toFixed(2)+' kg/周';
+    }
+
+    app.innerHTML=`
+      <div class="row" style="margin-bottom:12px;"><h1>体重</h1>
+        <span class="sub">目标 ${settings.goalWeight} kg</span></div>
+
+      <div class="card">
+        <div class="row">
+          <div><div class="sub">当前体重</div>
+            <div class="hero-num num" style="color:var(--indigo);">${cur.toFixed(1)}<span style="font-size:15px;color:var(--muted);font-weight:500;"> kg</span></div></div>
+          <div style="text-align:right;"><span class="deficit-chip" style="background:var(--indigo-soft);color:var(--indigo);">已减 ${lost.toFixed(1)} kg</span>
+            <div class="sub" style="margin-top:6px;">距目标还有 ${togo.toFixed(1)} kg</div></div>
+        </div>
+        ${svgChart(sorted)}
+        <div class="stat3" style="margin-top:10px;">
+          <div class="macro"><b class="num">${settings.startWeight}</b><span>起点 kg</span></div>
+          <div class="macro"><b class="num">${rate}</b><span>近两周速度</span></div>
+          <div class="macro"><b class="num">${settings.goalWeight}</b><span>目标 kg</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <b style="font-size:14px;">记录体重</b>
+        <div class="grid2" style="margin-top:10px;">
+          <input id="wkg" type="number" step="0.1" inputmode="decimal" placeholder="kg,如 ${cur.toFixed(1)}">
+          <input id="wdate" type="date" value="${todayStr()}">
+        </div>
+        <button class="btn-primary" id="wadd" style="margin-top:8px;">保存</button>
+      </div>
+
+      <div class="card">
+        <b style="font-size:14px;">历史记录</b>
+        ${sorted.length? [...sorted].reverse().slice(0,30).map(w=>`
+          <div class="entry"><span class="num sub">${w.d}</span>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <b class="num">${w.kg.toFixed(1)} kg</b>
+              <button class="del" data-wd="${w.d}">×</button>
+            </div></div>`).join('') : `<div class="empty">还没有体重记录</div>`}
+      </div>`;
+
+    $('#wadd').onclick=async()=>{
+      const kg=+$('#wkg').value, d=$('#wdate').value;
+      if(!kg||kg<30||kg>300){toast('请输入有效体重'); return;}
+      weights=weights.filter(w=>w.d!==d);
+      weights.push({d,kg});
+      await sset('weights',weights);
+      toast('已保存 '+kg+' kg');
+      renderWeight();
+    };
+    app.querySelectorAll('[data-wd]').forEach(b=>b.onclick=async()=>{
+      weights=weights.filter(w=>w.d!==b.dataset.wd);
+      await sset('weights',weights); renderWeight();
+    });
+  }
+
+  function svgChart(sorted){
+    if(sorted.length<2)return `<div class="empty">记录 2 次以上后显示趋势图</div>`;
+    const data=sorted.slice(-60);
+    const W=480,H=190,P=28;
+    const kgs=data.map(w=>w.kg).concat([settings.goalWeight]);
+    let min=Math.min(...kgs)-1, max=Math.max(...kgs)+1;
+    const x=i=>P+ i*(W-P-10)/(data.length-1);
+    const y=v=>H-P- (v-min)*(H-P-14)/(max-min);
+    const path=data.map((w,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(w.kg).toFixed(1)).join(' ');
+    const gy=y(settings.goalWeight);
+    return `<svg class="wchart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <line x1="${P}" y1="${gy}" x2="${W-10}" y2="${gy}" stroke="var(--green)" stroke-dasharray="5 5" stroke-width="1.5"/>
+      <text x="${W-12}" y="${gy-5}" text-anchor="end" font-size="10" fill="var(--green)">目标 ${settings.goalWeight}</text>
+      <path d="${path}" fill="none" stroke="var(--indigo)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${data.map((w,i)=>`<circle cx="${x(i)}" cy="${y(w.kg)}" r="3" fill="var(--indigo)"/>`).join('')}
+      <text x="${P}" y="${y(data[0].kg)-8}" font-size="10" fill="var(--muted)" class="num">${data[0].kg}</text>
+      <text x="${x(data.length-1)}" y="${y(data[data.length-1].kg)-8}" text-anchor="end" font-size="10" fill="var(--ink)" font-weight="700" class="num">${data[data.length-1].kg}</text>
+    </svg>`;
+  }
+
+  // ===== SETTINGS =====
+  function renderSettings(){
+    app.innerHTML=`
+      <h1 style="margin-bottom:12px;">设置</h1>
+      <div class="card">
+        <label class="f">每日热量目标 (kcal)</label>
+        <input id="s1" type="number" value="${settings.targetKcal}">
+        <label class="f">TDEE 每日消耗 (kcal)</label>
+        <input id="s2" type="number" value="${settings.tdee}">
+        <label class="f">起始体重 (kg)</label>
+        <input id="s3" type="number" step="0.1" value="${settings.startWeight}">
+        <label class="f">目标体重 (kg)</label>
+        <input id="s4" type="number" step="0.1" value="${settings.goalWeight}">
+        <button class="btn-primary" id="ssave" style="margin-top:14px;">保存设置</button>
+      </div>
+      <div class="card">
+        <b style="font-size:14px;">数据备份</b>
+        <div class="sub" style="margin:6px 0 10px;">数据保存在本机浏览器里。建议每周导出一次备份文件;换手机或清了浏览器数据后,用导入恢复。</div>
+        <div class="grid2">
+          <button class="btn-primary" id="sexport" style="background:var(--indigo);">导出备份</button>
+          <button class="btn-primary" id="simport" style="background:#FAF9F5;color:var(--ink);border:1px solid var(--line);">导入备份</button>
+        </div>
+        <input type="file" id="sfile" accept=".json" style="display:none;">
+      </div>
+      <div class="card sub" style="font-size:12.5px;">
+        缺口 = TDEE − 当日摄入。每天维持约 500 kcal 缺口 ≈ 每周减 0.5 kg。
+      </div>`;
+    $('#ssave').onclick=async()=>{
+      settings.targetKcal=+$('#s1').value||DEFAULTS.targetKcal;
+      settings.tdee=+$('#s2').value||DEFAULTS.tdee;
+      settings.startWeight=+$('#s3').value||DEFAULTS.startWeight;
+      settings.goalWeight=+$('#s4').value||DEFAULTS.goalWeight;
+      await sset('settings',settings);
+      toast('设置已保存');
+    };
+    $('#sexport').onclick=()=>{
+      const dump={};
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(k.startsWith(NS))dump[k]=localStorage.getItem(k);
+      }
+      const blob=new Blob([JSON.stringify(dump,null,1)],{type:'application/json'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='热量日志备份-'+todayStr()+'.json';
+      a.click();
+      toast('已导出备份文件');
+    };
+    $('#simport').onclick=()=>$('#sfile').click();
+    $('#sfile').onchange=e=>{
+      const f=e.target.files[0]; if(!f)return;
+      const r=new FileReader();
+      r.onload=async()=>{
+        try{
+          const dump=JSON.parse(r.result);
+          const keys=Object.keys(dump).filter(k=>k.startsWith(NS));
+          if(!keys.length)throw 0;
+          keys.forEach(k=>localStorage.setItem(k,dump[k]));
+          dayCache={};
+          const [s,w,fl]=await Promise.all([sget('settings'),sget('weights'),sget('foodlib')]);
+          if(s)settings={...DEFAULTS,...s}; if(w)weights=w; if(fl)foodlib=fl;
+          toast('已恢复 '+keys.length+' 条数据');
+          renderSettings();
+        }catch(_){toast('文件格式不对,请选择之前导出的备份');}
+      };
+      r.readAsText(f);
+    };
+  }
+
+  function esc(s){return String(s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
+
+  init();
+})();
+</script>
+</body>
+</html>
