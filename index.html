@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#F5F4EF">
-<title>热量日志</title>
+<title>Project Weight Loss</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍚</text></svg>">
 </head>
 <body>
@@ -58,6 +58,25 @@
   .entry .del{color:var(--muted); background:none; font-size:18px; padding:4px 8px; line-height:1;}
   .quick-wrap{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-top:10px; scrollbar-width:none;}
   .quick-wrap::-webkit-scrollbar{display:none;}
+  .foodgrid{display:flex; flex-wrap:wrap; gap:7px; margin-top:9px;}
+  .fooditem{background:#FAF9F5; border:1px solid var(--line); border-radius:10px; padding:7px 11px; font-size:12.5px;}
+  .fooditem b{color:var(--green); font-weight:600;}
+  .fooditem:active{background:var(--green-soft);}
+  /* weight ruler */
+  .wval-row{display:flex; align-items:baseline; justify-content:center; gap:6px; margin:4px 0 2px;}
+  .wval{font-size:46px; font-weight:700; color:var(--indigo); letter-spacing:-.02em;}
+  .ruler-wrap{position:relative; margin-top:6px;}
+  .ruler{overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+  .ruler::-webkit-scrollbar{display:none;}
+  .ruler-inner{display:flex; align-items:flex-end; height:64px; padding:0 50%;}
+  .kgtick{flex:0 0 70px; height:30px; border-left:2px solid #B9B5AB; position:relative;
+    background:repeating-linear-gradient(90deg, #DDD9CF 0 1.5px, transparent 1.5px 7px);
+    background-size:70px 15px; background-repeat:repeat-x; background-position:left bottom;}
+  .kgtick span{position:absolute; left:-14px; top:-22px; width:30px; text-align:center; font-size:11px; color:var(--muted);}
+  .pointer{position:absolute; left:50%; bottom:0; width:3px; height:44px; background:var(--indigo); border-radius:2px; transform:translateX(-50%); pointer-events:none;}
+  .pointer::after{content:""; position:absolute; top:-7px; left:50%; transform:translateX(-50%);
+    border:7px solid transparent; border-top-color:var(--indigo);}
+  .finebtn{background:#FAF9F5; border:1px solid var(--line); border-radius:10px; padding:8px 0; font-size:14px; font-weight:600; color:var(--indigo);}
   .quick{flex:0 0 auto; background:#FAF9F5; border:1px solid var(--line); border-radius:999px; padding:7px 13px; font-size:13px; white-space:nowrap;}
   .quick:active{background:var(--green-soft);}
   .grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
@@ -141,6 +160,7 @@
   // ---------- render ----------
   function render(){
     if(tab==='today')renderToday();
+    else if(tab==='library')renderLibrary();
     else if(tab==='weight')renderWeight();
     else renderSettings();
     renderTabs();
@@ -150,6 +170,7 @@
     bar.className='tabbar';
     bar.innerHTML=`
       <button class="tab ${tab==='today'?'on':''}" data-t="today"><span class="ico">🍚</span>饮食</button>
+      <button class="tab ${tab==='library'?'on':''}" data-t="library"><span class="ico">📖</span>食物库</button>
       <button class="tab w ${tab==='weight'?'on':''}" data-t="weight"><span class="ico">⚖️</span>体重</button>
       <button class="tab ${tab==='settings'?'on':''}" data-t="settings"><span class="ico">⚙️</span>设置</button>`;
     bar.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{tab=b.dataset.t; render(); window.scrollTo(0,0);});
@@ -174,7 +195,7 @@
 
     app.innerHTML=`
       <div class="row" style="margin-bottom:12px;">
-        <h1>热量日志</h1>
+        <h1>Project Weight Loss</h1>
         <div class="datepick">
           <button id="dprev">‹</button>
           <b style="min-width:52px;text-align:center;font-size:14px;">${fmtDate(viewDate)}</b>
@@ -212,7 +233,7 @@
         ${foodlib.length?`<div class="quick-wrap">${foodlib.slice(0,12).map((f,i)=>
           `<button class="quick num" data-q="${i}">${f.name} · ${f.kcal}</button>`).join('')}</div>`:''}
         <div class="grid4" style="margin-top:10px;">
-          <input id="fname" placeholder="食物名称">
+          <input id="fname" placeholder="名称,输入可搜索" autocomplete="off">
           <input id="fkcal" type="number" inputmode="numeric" placeholder="kcal">
           <input id="fp" type="number" inputmode="numeric" placeholder="蛋白g">
           <input id="ff" type="number" inputmode="numeric" placeholder="脂肪g">
@@ -221,6 +242,7 @@
           <input id="fc" type="number" inputmode="numeric" placeholder="碳水g (可不填)">
           <button class="btn-primary" id="fadd" style="width:100%;">添加</button>
         </div>
+        <div class="foodgrid" id="sugg" style="margin-top:8px;"></div>
       </div>
 
       <div class="card">
@@ -249,6 +271,24 @@
     $('#dnext').onclick=()=>{if(!isToday){viewDate=shiftDate(viewDate,1); renderToday();}};
     $('#fadd').onclick=addFood;
     $('#fkcal').addEventListener('keydown',e=>{if(e.key==='Enter')addFood();});
+
+    function foodBtn(f){return `<button class="fooditem" data-food='${JSON.stringify(f).replace(/'/g,"&#39;")}'>${f[0]} <b class="num">${f[1]}</b></button>`;}
+    function bindFoodBtns(box){
+      box.querySelectorAll('[data-food]').forEach(b=>b.onclick=()=>{
+        const f=JSON.parse(b.dataset.food);
+        $('#fname').value=f[0]; $('#fkcal').value=f[1];
+        $('#fp').value=f[2]||''; $('#fc').value=f[3]||''; $('#ff').value=f[4]||'';
+        $('#sugg').innerHTML='';
+        $('#fadd').scrollIntoView({block:'nearest'});
+      });
+    }
+    $('#fname').addEventListener('input',()=>{
+      const q=$('#fname').value.trim();
+      if(!q){$('#sugg').innerHTML=''; return;}
+      const out=foodlib.filter(f=>f.name.includes(q)).slice(0,8).map(f=>[f.name,f.kcal,f.p,f.c,f.f]);
+      $('#sugg').innerHTML=out.map(foodBtn).join('');
+      bindFoodBtns($('#sugg'));
+    });
     app.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{
       const f=foodlib[+b.dataset.q];
       addEntry({name:f.name,kcal:f.kcal,p:f.p,c:f.c,f:f.f});
@@ -269,16 +309,83 @@
       const dd=dayCache[viewDate];
       const now=new Date();
       dd.entries.push({...e,id:String(Date.now()),time:String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')});
-      // update food library
+      // 食物库由用户自己维护;这里只更新常用度排序
       const ex=foodlib.find(f=>f.name===e.name);
-      if(ex){ex.count++; ex.last=Date.now(); ex.kcal=e.kcal;}
-      else foodlib.push({...e,count:1,last:Date.now()});
-      foodlib.sort((a,b)=>(b.count*2+b.last/1e13)-(a.count*2+a.last/1e13));
-      foodlib=foodlib.slice(0,30);
-      await Promise.all([saveDay(viewDate), sset('foodlib',foodlib)]);
+      if(ex){ex.count=(ex.count||0)+1; ex.last=Date.now();
+        foodlib.sort((a,b)=>((b.count||0)*2+(b.last||0)/1e13)-((a.count||0)*2+(a.last||0)/1e13));}
+      await Promise.all([saveDay(viewDate), ex?sset('foodlib',foodlib):Promise.resolve()]);
       toast('已记录 '+e.name);
       renderToday();
     }
+  }
+
+  // ===== FOOD LIBRARY =====
+  let editIdx=-1;
+  function renderLibrary(){
+    app.innerHTML=`
+      <div class="row" style="margin-bottom:12px;"><h1>我的食物库</h1>
+        <span class="sub num">${foodlib.length} 种</span></div>
+
+      <div class="card">
+        <b style="font-size:14px;" id="lformtitle">${editIdx>=0?'编辑食物':'添加食物'}</b>
+        <div class="sub" style="margin:4px 0 8px;">按你常吃的一份来记,比如"食堂鸡腿饭""楼下拿铁"。</div>
+        <div class="grid2">
+          <input id="lname" placeholder="名称,如 食堂鸡腿饭">
+          <input id="lkcal" type="number" inputmode="numeric" placeholder="热量 kcal">
+        </div>
+        <div class="grid2" style="margin-top:8px;grid-template-columns:1fr 1fr 1fr;">
+          <input id="lp" type="number" inputmode="numeric" placeholder="蛋白g">
+          <input id="lc" type="number" inputmode="numeric" placeholder="碳水g">
+          <input id="lf" type="number" inputmode="numeric" placeholder="脂肪g">
+        </div>
+        <div class="grid2" style="margin-top:8px;">
+          ${editIdx>=0?'<button class="btn-ghost" id="lcancel" style="border:1px solid var(--line);border-radius:12px;">取消</button>':'<span></span>'}
+          <button class="btn-primary" id="lsave">${editIdx>=0?'保存修改':'存入食物库'}</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <b style="font-size:14px;">已保存</b>
+        ${foodlib.length? foodlib.map((f,i)=>`
+          <div class="entry">
+            <div><b style="font-size:14px;">${esc(f.name)}</b>
+              <div class="sub num">${f.p?'蛋白 '+f.p+'g':''}${f.c?' · 碳水 '+f.c+'g':''}${f.f?' · 脂肪 '+f.f+'g':''}${f.count?' · 用过 '+f.count+' 次':''}</div></div>
+            <div style="display:flex;align-items:center;gap:2px;">
+              <b class="num" style="color:var(--green);">${f.kcal}</b>
+              <button class="del" data-edit="${i}" style="font-size:14px;">✎</button>
+              <button class="del" data-rm="${i}">×</button>
+            </div>
+          </div>`).join('') : `<div class="empty">还没有食物,把常吃的加进来 ↑</div>`}
+      </div>`;
+
+    if(editIdx>=0){
+      const f=foodlib[editIdx];
+      $('#lname').value=f.name; $('#lkcal').value=f.kcal;
+      $('#lp').value=f.p||''; $('#lc').value=f.c||''; $('#lf').value=f.f||'';
+      const c=$('#lcancel'); if(c)c.onclick=()=>{editIdx=-1; renderLibrary();};
+    }
+    $('#lsave').onclick=async()=>{
+      const name=$('#lname').value.trim(), kcal=+$('#lkcal').value;
+      if(!name||!kcal){toast('请填写名称和热量'); return;}
+      const item={name,kcal,p:+$('#lp').value||0,c:+$('#lc').value||0,f:+$('#lf').value||0};
+      if(editIdx>=0){
+        foodlib[editIdx]={...foodlib[editIdx],...item};
+        editIdx=-1;
+      }else{
+        if(foodlib.some(f=>f.name===name)){toast('已有同名食物,可点 ✎ 修改'); return;}
+        foodlib.push({...item,count:0,last:0});
+      }
+      await sset('foodlib',foodlib);
+      toast('已保存 '+name);
+      renderLibrary();
+    };
+    app.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{editIdx=+b.dataset.edit; renderLibrary(); window.scrollTo(0,0);});
+    app.querySelectorAll('[data-rm]').forEach(b=>b.onclick=async()=>{
+      foodlib.splice(+b.dataset.rm,1);
+      if(editIdx>=0)editIdx=-1;
+      await sset('foodlib',foodlib);
+      renderLibrary();
+    });
   }
 
   // ===== WEIGHT =====
@@ -317,11 +424,19 @@
 
       <div class="card">
         <b style="font-size:14px;">记录体重</b>
-        <div class="grid2" style="margin-top:10px;">
-          <input id="wkg" type="number" step="0.1" inputmode="decimal" placeholder="kg,如 ${cur.toFixed(1)}">
-          <input id="wdate" type="date" value="${todayStr()}">
+        <div class="wval-row"><span class="wval num" id="wval">${cur.toFixed(1)}</span><span class="sub">kg</span></div>
+        <div class="ruler-wrap">
+          <div class="ruler" id="ruler"><div class="ruler-inner" id="rinner"></div></div>
+          <div class="pointer"></div>
         </div>
-        <button class="btn-primary" id="wadd" style="margin-top:8px;">保存</button>
+        <div class="grid2" style="margin-top:12px;">
+          <button class="finebtn" data-f="-1">− 0.1</button>
+          <button class="finebtn" data-f="1">+ 0.1</button>
+        </div>
+        <div class="grid2" style="margin-top:8px;">
+          <input id="wdate" type="date" value="${todayStr()}">
+          <button class="btn-primary" id="wadd" style="width:100%;">保存</button>
+        </div>
       </div>
 
       <div class="card">
@@ -334,8 +449,31 @@
             </div></div>`).join('') : `<div class="empty">还没有体重记录</div>`}
       </div>`;
 
+    // --- 滑动刻度尺 ---
+    const RMIN=40, RMAX=150, PX=70; // 1kg = 70px
+    const rinner=$('#rinner'), ruler=$('#ruler');
+    let html='';
+    for(let k=RMIN;k<=RMAX;k++)
+      html+=`<div class="kgtick">${k%5===0?`<span class="num">${k}</span>`:''}</div>`;
+    rinner.innerHTML=html;
+    let wsel=Math.min(RMAX,Math.max(RMIN,cur));
+    requestAnimationFrame(()=>{ruler.scrollLeft=(wsel-RMIN)*PX;});
+    let raf=null;
+    ruler.addEventListener('scroll',()=>{
+      if(raf)return;
+      raf=requestAnimationFrame(()=>{
+        raf=null;
+        wsel=Math.round((RMIN+ruler.scrollLeft/PX)*10)/10;
+        wsel=Math.min(RMAX,Math.max(RMIN,wsel));
+        $('#wval').textContent=wsel.toFixed(1);
+      });
+    });
+    app.querySelectorAll('.finebtn').forEach(b=>b.onclick=()=>{
+      ruler.scrollTo({left:ruler.scrollLeft + (+b.dataset.f)*7, behavior:'smooth'});
+    });
+
     $('#wadd').onclick=async()=>{
-      const kg=+$('#wkg').value, d=$('#wdate').value;
+      const kg=wsel, d=$('#wdate').value;
       if(!kg||kg<30||kg>300){toast('请输入有效体重'); return;}
       weights=weights.filter(w=>w.d!==d);
       weights.push({d,kg});
